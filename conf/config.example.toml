@@ -1,0 +1,17 @@
+[telegram]
+id = [ids, ids, ids]
+token = "your-telegram-bot-token"
+
+[weather]
+latitude = "45.26"
+longitude = "9.34"
+rain_threshold_mm = 3
+
+[watering]
+forecast_days = 3
+history_days = 3
+interval_days = 4 #Innaffiare ogni quattro giorni
+
+[database]
+name = "weather.db"
+path = stuff
