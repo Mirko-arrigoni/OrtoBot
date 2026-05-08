@@ -1,8 +1,8 @@
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from irrigation import should_water
-from weather import updatedb_fromTelegram
-from configReader import getTelegramSettings
+from data_manager import update_db_from_telegram
+from config_reader import get_telegram_settings
+from bll_watering import should_irrigate
 
 # Comando /w
 async def w_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -10,13 +10,13 @@ async def w_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Quando l'utente scrive /w, chiama updatedb_fromTelegram e risponde con conferma/errore.
     """
     try:
-        updatedb_fromTelegram() 
+        update_db_from_telegram() 
         await update.message.reply_text("✅ OK!")
     except Exception as e:
         await update.message.reply_text(f"❌ Errore durante l'update:\n{e}")
 
 def main():
-    TOKEN = getTelegramSettings()["token"]  # Ottieni il token dal file di configurazione
+    TOKEN = get_telegram_settings()["token"]  # Ottieni il token dal file di configurazione
     
     # Costruisci l'applicazione del bot
     app = ApplicationBuilder().token(TOKEN).build()
