@@ -1,17 +1,37 @@
+# === CONFIGURAZIONE TELEGRAM ===
 [telegram]
-id = [ids, ids, ids]
+# ID della chat Telegram dove ricevere le notifiche
+chat_id = 123456789
+# Token del bot Telegram (da @BotFather)
 token = "your-telegram-bot-token"
+# Livello di logging: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_level = "DEBUG"
+# Se true, ricevi notifiche anche quando l'irrigazione NON è necessaria
+not_necessary_irrigation_confirm = true
 
+# === CONFIGURAZIONE METEO ===
 [weather]
-latitude = "45.26"
+# Coordinate geografiche (latitudine)
+latitude = "45.20"
+# Coordinate geografiche (longitudine)
 longitude = "9.34"
+# URL API Open-Meteo per i dati meteo
+api_url = "https://api.open-meteo.com/v1/forecast"
+# Soglia di pioggia totale giornaliera (mm) considerata come "pioggia" nei dati meteo
 rain_threshold_mm = 3
+# Intervallo di controllo irrigazione in secondi
+interval_check = 14400
 
+# === CONFIGURAZIONE IRRIGAZIONE ===
 [watering]
-forecast_days = 3
-history_days = 3
-interval_days = 4 #Innaffiare ogni quattro giorni
+# Giorni passati: se non piove da più di X giorni, considera l'irrigazione
+range_past_days = 4
+# Giorni futuri: se non pioverà nei prossimi X giorni, attiva l'irrigazione
+range_future_days = 2
+# Soglia di pioggia (mm) per bloccare l'irrigazione
+rain_threshold_mm = 6
 
+# === CONFIGURAZIONE DATABASE ===
 [database]
+# Nome del file database SQLite dove salvare i dati di precipitazione
 name = "weather.db"
-path = stuff

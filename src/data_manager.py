@@ -1,124 +1,177 @@
-import requests, requests_cache
-from retry_requests import retry
+"""
+Modulo per la gestione dei dati.
+Gestisce l'interazione con il database SQLite e le chiamate all'API meteo.
+Include funzioni per salvare, aggiornare e recuperare dati di precipitazione.
+"""
+
+import logging
 import sqlite3
 from datetime import datetime, timezone
+from typing import Dict
+
+import requests
+import requests_cache
+from retry_requests import retry
 
 from config_reader import (
-    get_weather_settings,
-    get_irrigation_settings,
     get_database_settings,
+    get_irrigation_settings,
+    get_weather_settings,
 )
 
-# setup client (cache + retry)
+# Logger per questo modulo
+logger = logging.getLogger(__name__)
+
+# Setup del client HTTP con cache e retry automatico
+# Cache: salva le risposte per 1 ora per evitare chiamate ripetute
+# Retry: ritenta fino a 3 volte con backoff esponenziale
 cache_session = requests_cache.CachedSession(".cache", expire_after=3600)
 retry_session = retry(cache_session, retries=3, backoff_factor=0.2)
 
 
-def save_to_db_from_api(days) -> None:
-    conn = sqlite3.connect(get_database_settings()["name"])
-    cursor = conn.cursor()
+def save_to_db_from_api(days: Dict[str, bool]) -> None:
+    """
+    Salva nel database i dati di precipitazione ricevuti dall'API meteo.
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS precipitation (
-            date TEXT PRIMARY KEY,
-            is_rain BOOLEAN,
-            updated_at TEXT,
-            manual BOOLEAN DEFAULT FALSE
-        )
-    """)
+    La tabella precipitation memorizza per ogni data se ha piovuto o no,
+    con timestamp di aggiornamento e flag per dati manuali vs automatici.
 
-    today = datetime.now().date()
+    Args:
+        days: Dizionario {data_iso: ha_piovuto_bool}
 
-    for day, is_rain in days.items():
-        now_iso = datetime.now(timezone.utc).isoformat()
+    Raises:
+        RuntimeError: Se ci sono errori nel database
+    """
+    db_path = get_database_settings()["name"]
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
 
-        # Aggiorna solo i record esistenti dove manual = FALSE
-        cursor.execute(
-            """
-            UPDATE precipitation
-            SET is_rain = ?, updated_at = ?
-            WHERE date = ? AND manual = FALSE
-        """,
-            (is_rain, now_iso, day),
-        )
+            # Crea la tabella se non esiste
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS precipitation (
+                    date TEXT PRIMARY KEY,        -- Data in formato ISO (YYYY-MM-DD)
+                    is_rain BOOLEAN,              -- True se ha piovuto quel giorno
+                    updated_at TEXT,              -- Timestamp ultima modifica (ISO)
+                    manual BOOLEAN DEFAULT FALSE  -- True se modificato manualmente
+                )
+            """)
 
-        #  Inserisce solo se non esiste già un record per quella data (evitando di sovrascrivere quelli manuali)
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO precipitation (date, is_rain, updated_at, manual)
-            VALUES (?, ?, ?, FALSE)
-        """,
-            (day, is_rain, now_iso),
-        )
+            now_iso = datetime.now(timezone.utc).isoformat()
 
-    conn.commit()
-    conn.close()
+            for day, is_rain in days.items():
+                # Aggiorna solo record automatici (non manuali) per evitare sovrascritture
+                cursor.execute(
+                    """
+                    UPDATE precipitation
+                    SET is_rain = ?, updated_at = ?
+                    WHERE date = ? AND manual = FALSE
+                """,
+                    (is_rain, now_iso, day),
+                )
+
+                # Inserisce nuovo record se non esiste (non sovrascrive manuali)
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO precipitation (date, is_rain, updated_at, manual)
+                    VALUES (?, ?, ?, FALSE)
+                """,
+                    (day, is_rain, now_iso),
+                )
+
+            conn.commit()
+    except sqlite3.Error as exc:
+        raise RuntimeError(f"Errore nel salvataggio nel DB: {exc}") from exc
 
 
 def update_db_from_telegram() -> None:
     """
-    Aggiorna il DB impostando is_rain=True e manual=True per la data di oggi.
-    Ritorna True se tutto va bene, False se c'è un errore.
+    Aggiorna il database quando l'utente conferma manualmente l'irrigazione.
+
+    Imposta is_rain=True e manual=True per la data odierna,
+    segnalando che oggi ha piovuto (irrigazione effettuata).
     """
-    conn = sqlite3.connect(get_database_settings()["name"])
-
+    db_path = get_database_settings()["name"]
     try:
-        cursor = conn.cursor()
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
 
-        # Aggiorna la riga della data di oggi
-        cursor.execute(
-            "UPDATE precipitation SET is_rain = ?, manual = ?, updated_at = ? WHERE date = ?",
-            (
-                True,
-                True,
-                datetime.now(timezone.utc).isoformat(),
-                datetime.now().date().isoformat(),
-            ),
-        )
+            cursor.execute(
+                "UPDATE precipitation SET is_rain = ?, manual = ?, updated_at = ? WHERE date = ?",
+                (
+                    True,  # Ha piovuto (irrigato)
+                    True,  # Modifica manuale
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now().date().isoformat(),
+                ),
+            )
 
-        conn.commit()
-
-    except Exception as e:
-        raise RuntimeError(f"Errore aggiornando il DB: {e}") from e
-    finally:
-        if conn in locals():
-            conn.close()
+            conn.commit()
+    except sqlite3.Error as exc:
+        raise RuntimeError(f"Errore aggiornando il DB: {exc}") from exc
 
 
 def get_daily_precipitation() -> None:
-    wtr_settings = get_weather_settings()
-    irr_settings = get_irrigation_settings()
+    """
+    Recupera i dati di precipitazione giornaliera dall'API Open-Meteo e li salva nel DB.
 
-    params = {
-        "latitude": wtr_settings["latitude"],
-        "longitude": wtr_settings["longitude"],
-        "daily": "precipitation_sum",
-        "timezone": "Europe/Rome",
-        "forecast_days": irr_settings["range_future_days"] + 1,
-        "past_days": irr_settings["range_past_days"],
-    }
+    Effettua una chiamata all'API con parametri basati sulla configurazione:
+    - Coordinate geografiche
+    - Range giorni passati/futuri
+    - Soglia pioggia per considerare "pioggia"
 
-    response = requests.get(get_weather_settings()["url_api"], params=params)
-    response.raise_for_status()  # solleva errore se la request fallisce
+    Raises:
+        RuntimeError: Se ci sono errori nella chiamata API o nel parsing
+    """
+    try:
+        wtr_settings = get_weather_settings()
+        irr_settings = get_irrigation_settings()
 
-    data = response.json()
+        # Parametri per la chiamata API Open-Meteo
+        params = {
+            "latitude": wtr_settings["latitude"],           # Latitudine posizione
+            "longitude": wtr_settings["longitude"],         # Longitudine posizione
+            "daily": "precipitation_sum",                   # Richiedi somma precipitazione giornaliera
+            "timezone": "Europe/Rome",                      # Fuso orario italiano
+            "forecast_days": irr_settings["range_future_days"] + 1,  # Giorni previsione + oggi
+            "past_days": irr_settings["range_past_days"],   # Giorni passati da includere
+        }
 
-    dates = data["daily"]["time"]
-    precipitation = data["daily"]["precipitation_sum"]
+        # Chiamata API con timeout di 10 secondi
+        response = requests.get(wtr_settings["url_api"], params=params, timeout=10)
+        response.raise_for_status()  # Solleva eccezione per errori HTTP
 
-    # crea dict: { "2026-05-04": 2.3, ... }
-    result = dict(zip(dates, precipitation > irr_settings["rain_threshold_mm"]))
+        # Parsing della risposta JSON
+        data = response.json()
+        dates = data["daily"]["time"]                    # Lista date ISO
+        precipitation = data["daily"]["precipitation_sum"]  # Lista mm pioggia per data
 
-    save_to_db_from_api(result)
+        # Converte in dict: {data: ha_piovuto} basandosi sulla soglia
+        result = dict(zip(dates, precipitation > irr_settings["rain_threshold_mm"]))
+        save_to_db_from_api(result)
+
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Errore recuperando dati meteo: {exc}") from exc
+    except (KeyError, ValueError) as exc:
+        raise RuntimeError(f"Errore parsing risposta meteo: {exc}") from exc
 
 
-def get_precipitation_from_db() -> dict:
-    conn = sqlite3.connect(get_database_settings()["name"])
-    cursor = conn.cursor()
+def get_precipitation_from_db() -> Dict[str, bool]:
+    """
+    Recupera tutti i dati di precipitazione dal database.
 
-    cursor.execute("SELECT date, is_rain FROM precipitation")
-    rows = cursor.fetchall()
+    Returns:
+        Dict[str, bool]: {data_iso: ha_piovuto_bool} per tutte le date nel DB
 
-    conn.close()
-
-    return {row[0]: bool(row[1]) for row in rows}
+    Raises:
+        RuntimeError: Se ci sono errori nella lettura del database
+    """
+    db_path = get_database_settings()["name"]
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT date, is_rain FROM precipitation")
+            rows = cursor.fetchall()
+        return {row[0]: bool(row[1]) for row in rows}
+    except sqlite3.Error as exc:
+        raise RuntimeError(f"Errore leggendo dal DB: {exc}") from exc
