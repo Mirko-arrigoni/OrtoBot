@@ -48,7 +48,7 @@ ALTRIMENTI → Irrigazione NON necessaria
 
 1. **Clona il repository**
    ```bash
-   git clone https://github.com/tuo-username/orto-bot.git
+   git clone https://github.com/Mirko-arrigoni/orto-bot.git
    cd orto-bot
    ```
 
@@ -190,7 +190,7 @@ Questo progetto è distribuito sotto licenza MIT. Vedi il file `LICENSE` per i d
 
 ## 📞 Supporto
 
-Hai problemi? Apri una [issue](https://github.com/tuo-username/orto-bot/issues) su GitHub!
+Hai problemi? Apri una [issue](https://github.com/Mirko-arrigoni/orto-bot/issues) su GitHub!
 
 ---
 
