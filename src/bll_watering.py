@@ -18,19 +18,27 @@ def should_irrigate() -> bool:
     ALTRIMENTI
         irrigazione OFF
 
-        
+
     per irrigazione ON si intende l'invio della notifica su telegram.
     Poi sta all'utente effettivamente mandare il comando per salvare il giorno corrente come ultimo_giorno_precipitazione (se non sovrascritto dal meteo).
     """
-    
+
     config = get_irrigation_settings()
     soglia_past = config["range_past_days"]
     soglia_futura = config["range_future_days"]
 
     today = date.today()
     precipitation_calendar = get_precipitation_from_db()
-    past_precipitation = [date.fromisoformat(day) for day, is_rain in precipitation_calendar.items() if is_rain and date.fromisoformat(day) < today]
-    future_precipitation = [date.fromisoformat(day) for day, is_rain in precipitation_calendar.items() if is_rain and date.fromisoformat(day) >= today]
+    past_precipitation = [
+        date.fromisoformat(day)
+        for day, is_rain in precipitation_calendar.items()
+        if is_rain and date.fromisoformat(day) < today
+    ]
+    future_precipitation = [
+        date.fromisoformat(day)
+        for day, is_rain in precipitation_calendar.items()
+        if is_rain and date.fromisoformat(day) >= today
+    ]
 
     # Se non ha mai piovuto, le variabili sono None.
     last_rain_date = max(past_precipitation) if past_precipitation else None

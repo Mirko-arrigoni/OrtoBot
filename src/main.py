@@ -1,32 +1,76 @@
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+)
+
 from data_manager import update_db_from_telegram
 from config_reader import get_telegram_settings
 from bll_watering import should_irrigate
 
-# Comando /w
+
+# =========================
+# COMANDO MANUALE /w
+# =========================
 async def w_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Quando l'utente scrive /w, chiama updatedb_fromTelegram e risponde con conferma/errore.
-    """
     try:
-        update_db_from_telegram() 
+        update_db_from_telegram()
         await update.message.reply_text("✅ OK!")
     except Exception as e:
         await update.message.reply_text(f"❌ Errore durante l'update:\n{e}")
 
+
+# =========================
+# JOB AUTOMATICO OGNI 4 ORE
+# =========================
+async def irrigation_check(context: ContextTypes.DEFAULT_TYPE):
+    try:
+
+        result = should_irrigate()
+
+        chat_id = get_telegram_settings()["chat_id"]
+
+        if result:
+            message = "💧 Irrigazione NECESSARIA"
+        else:
+            message = "🌧️ Irrigazione NON necessaria"
+
+        await context.bot.send_message(chat_id=chat_id, text=message)
+
+    except Exception as e:
+        chat_id = get_telegram_settings()["chat_id"]
+
+        await context.bot.send_message(
+            chat_id=chat_id, text=f"❌ Errore nel controllo irrigazione:\n{e}"
+        )
+
+
 def main():
-    TOKEN = get_telegram_settings()["token"]  # Ottieni il token dal file di configurazione
-    
-    # Costruisci l'applicazione del bot
+    settings = get_telegram_settings()
+
+    TOKEN = settings["token"]
+
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Aggiungi il comando /w
+    # comando manuale
     app.add_handler(CommandHandler("w", w_command))
 
-    # Avvia il bot
+    # =========================
+    # JOB OGNI 4 ORE
+    # =========================
+    job_queue = app.job_queue
+
+    job_queue.run_repeating(
+        irrigation_check,
+        interval=4 * 60 * 60,  # 4 ore
+        first=10,  # parte dopo 10 secondi
+    )
+
     print("Il treno ha fischiato!")
+
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
