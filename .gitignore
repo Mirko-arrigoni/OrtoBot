@@ -6,7 +6,6 @@ dist/
 wheels/
 *.egg-info
 .cache.sqlite
-.python-version
 
 # Virtual environments
 .venv
