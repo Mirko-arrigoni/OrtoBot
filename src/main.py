@@ -13,6 +13,7 @@ e un database SQLite per memorizzare i dati di precipitazione.
 
 import logging
 import sys
+import token
 
 from telegram import Update
 from telegram.ext import (
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 # Silenzia i log dettagliati della libreria telegram (solo errori critici)
 logging.getLogger("telegram").setLevel(logging.CRITICAL)
+logging.getLogger("httpx").setLevel(logging.ERROR)
 
 
 async def w_command(update: Update) -> None:
@@ -75,7 +77,7 @@ async def irrigation_check(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         result = should_irrigate()  # Logica: deve irrigare?
         chat_id = get_telegram_settings()["chat_id"]
-        necessary_confirm = get_telegram_settings().get("not_necessary_irrigation_confirm", False)
+        necessary_confirm = bool(get_telegram_settings().get("not_necessary_irrigation_confirm", False))
 
         # Invia messaggio solo se irrigazione necessaria, o se configurato per notificare anche quando non necessaria
         if result or necessary_confirm:
@@ -113,6 +115,10 @@ def main() -> int:
 
         # Crea l'applicazione Telegram
         app = ApplicationBuilder().token(token).build()
+
+        txt = f"Bot Telegram creato con token: {token[:4]}****"
+        print(txt)  # Stampa parziale del token per sicurezza
+        logger.debug(txt)  # Log parziale del token per sicurezza
 
         # Registra il comando /w
         app.add_handler(CommandHandler("w", w_command))

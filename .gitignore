@@ -16,3 +16,9 @@ uv.lock
 
 # Log
 *log*
+
+# Database
+*.db
+
+# Todo files
+eltodo

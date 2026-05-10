@@ -7,7 +7,7 @@ run:
 
 # Deletes the log files
 clean:
-	echo "DO SOMETHING"
+	echo "" > log.txt
 
 format: fmt
 fmt:

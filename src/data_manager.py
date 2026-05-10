@@ -138,8 +138,10 @@ def get_daily_precipitation() -> None:
         }
 
         # Chiamata API con timeout di 10 secondi
-        response = requests.get(wtr_settings["url_api"], params=params, timeout=10)
+        response = requests.get(wtr_settings["api_url"], params=params, timeout=10)
         response.raise_for_status()  # Solleva eccezione per errori HTTP
+
+        logger.debug(f"API meteo chiamata con params: {params}")
 
         # Parsing della risposta JSON
         data = response.json()
@@ -147,7 +149,7 @@ def get_daily_precipitation() -> None:
         precipitation = data["daily"]["precipitation_sum"]  # Lista mm pioggia per data
 
         # Converte in dict: {data: ha_piovuto} basandosi sulla soglia
-        result = dict(zip(dates, precipitation > irr_settings["rain_threshold_mm"]))
+        result = dict(zip(dates, [p > irr_settings["rain_threshold_mm"] for p in precipitation]))
         save_to_db_from_api(result)
 
     except requests.RequestException as exc:
@@ -166,6 +168,11 @@ def get_precipitation_from_db() -> Dict[str, bool]:
     Raises:
         RuntimeError: Se ci sono errori nella lettura del database
     """
+    try:
+        get_daily_precipitation()  # Aggiorna i dati meteo prima di leggere dal DB
+    except RuntimeError as exc:
+        logger.warning(f"Impossibile aggiornare i dati meteo: {exc}")
+
     db_path = get_database_settings()["name"]
     try:
         with sqlite3.connect(db_path) as conn:
