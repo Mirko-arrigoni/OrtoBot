@@ -14,6 +14,7 @@ e un database SQLite per memorizzare i dati di precipitazione.
 import logging
 import sys
 import token
+from datetime import datetime, timedelta
 
 from telegram import Update
 from telegram.ext import (
@@ -24,7 +25,7 @@ from telegram.ext import (
 
 from bll_watering import should_irrigate
 from config_reader import get_telegram_settings, get_weather_settings, get_current_dir
-from data_manager import update_db_from_telegram
+from data_manager import update_db_from_telegram, get_all_precipitation_data
 
 # === CONFIGURAZIONE LOGGING ===
 # Legge il livello di log dalla configurazione, WARNING di default se non specificato o errato
@@ -63,6 +64,46 @@ async def w_command(update: Update) -> None:
         logger.exception("Errore durante l'update da Telegram")
         await update.message.reply_text(
             "❌ Errore durante l'update. Controlla i log del bot."
+        )
+
+
+async def db_command(update: Update) -> None:
+    """
+    Gestore del comando /db.
+
+    Invia i dati di precipitazione dal database.
+    Di default gli ultimi 7 giorni, altrimenti tutto se specificato "all".
+
+    """
+    try:
+        args = update.message.text.split()[1:]  # Ottieni argomenti dopo /db
+        show_all = len(args) > 0 and args[0].lower() == "all"
+
+        data = get_all_precipitation_data()
+
+        if not show_all:
+            # Filtra ultimi N giorni (da config)
+            days = get_telegram_settings().get("days_read_from_db", 7)
+            n_days_ago = (datetime.now() - timedelta(days=days)).date().isoformat()
+            data = [d for d in data if d["date"] >= n_days_ago]
+
+        if not data:
+            await update.message.reply_text("Nessun dato trovato.")
+            return
+
+        # Formatta i dati
+        lines = ["📅 Dati precipitazione:"]
+        for d in data:
+            rain_str = f"{d['rain_mm']}mm" if d['rain_mm'] is not None else "N/A"
+            manual_str = " (manuale)" if d['manual'] else ""
+            lines.append(f"{d['date']}: {'Sì' if d['is_rain'] else 'No'} ({rain_str}){manual_str}")
+
+        message = "\n".join(lines)
+        await update.message.reply_text(message)
+    except Exception:
+        logger.exception("Errore durante il comando /db")
+        await update.message.reply_text(
+            "❌ Errore durante la lettura del DB. Controlla i log del bot."
         )
 
 
@@ -120,17 +161,18 @@ def main() -> int:
         print(txt)  # Stampa parziale del token per sicurezza
         logger.debug(txt)  # Log parziale del token per sicurezza
 
-        # Registra il comando /w
+        # Registra i comandi
         app.add_handler(CommandHandler("w", w_command))
+        app.add_handler(CommandHandler("db", db_command))
 
         # Pianifica il controllo periodico dell'irrigazione
         app.job_queue.run_repeating(
             irrigation_check,
             interval=get_weather_settings()["interval_check"],  # Ogni X secondi
-            first=10,  # Aspetta 10 secondi prima del primo controllo
+            first=5,  # Aspetta 10 secondi prima del primo controllo
         )
 
-        logger.info("Bot avviato: in ascolto e job pianificato ogni 4 ore")
+        logger.info(f"Bot avviato: comandi /w e /db disponibili, job pianificato ogni {get_weather_settings()['interval_check'] // 3600} ore")
         app.run_polling()  # Avvia il loop di ricezione messaggi
         return 0
     except Exception:

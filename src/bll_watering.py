@@ -8,7 +8,7 @@ from datetime import date
 from typing import Optional
 
 from config_reader import get_irrigation_settings
-from data_manager import get_precipitation_from_db
+from data_manager import get_all_precipitation_data
 
 # Logger per questo modulo
 logger = logging.getLogger(__name__)
@@ -35,7 +35,8 @@ def should_irrigate() -> bool:
         gg_futuri = config["range_future_days"]  # Giorni futuri senza pioggia per confermare irrigazione
 
         today = date.today()
-        precipitation_calendar = get_precipitation_from_db()
+        precipitation_data = get_all_precipitation_data()
+        precipitation_calendar = {d["date"]: d["is_rain"] for d in precipitation_data}
 
         # Filtra le date di pioggia nel passato (prima di oggi)
         past_precipitation = [

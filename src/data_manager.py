@@ -29,7 +29,7 @@ cache_session = requests_cache.CachedSession(".cache", expire_after=3600)
 retry_session = retry(cache_session, retries=3, backoff_factor=0.2)
 
 
-def save_to_db_from_api(days: Dict[str, bool]) -> None:
+def save_to_db_from_api(days: Dict[str, tuple[bool, float]]) -> None:
     """
     Salva nel database i dati di precipitazione ricevuti dall'API meteo.
 
@@ -37,7 +37,7 @@ def save_to_db_from_api(days: Dict[str, bool]) -> None:
     con timestamp di aggiornamento e flag per dati manuali vs automatici.
 
     Args:
-        days: Dizionario {data_iso: ha_piovuto_bool}
+        days: Dizionario {data_iso: (ha_piovuto_bool, rain_mm)}
 
     Raises:
         RuntimeError: Se ci sono errori nel database
@@ -52,6 +52,7 @@ def save_to_db_from_api(days: Dict[str, bool]) -> None:
                 CREATE TABLE IF NOT EXISTS precipitation (
                     date TEXT PRIMARY KEY,        -- Data in formato ISO (YYYY-MM-DD)
                     is_rain BOOLEAN,              -- True se ha piovuto quel giorno
+                    rain_mm REAL,                 -- Quantità di pioggia in mm (opzionale)
                     updated_at TEXT,              -- Timestamp ultima modifica (ISO)
                     manual BOOLEAN DEFAULT FALSE  -- True se modificato manualmente
                 )
@@ -59,24 +60,24 @@ def save_to_db_from_api(days: Dict[str, bool]) -> None:
 
             now_iso = datetime.now(timezone.utc).isoformat()
 
-            for day, is_rain in days.items():
+            for day, (is_rain, rain_mm) in days.items():
                 # Aggiorna solo record automatici (non manuali) per evitare sovrascritture
                 cursor.execute(
                     """
                     UPDATE precipitation
-                    SET is_rain = ?, updated_at = ?
+                    SET is_rain = ?, rain_mm = ?, updated_at = ?
                     WHERE date = ? AND manual = FALSE
                 """,
-                    (is_rain, now_iso, day),
+                    (is_rain, rain_mm, now_iso, day),
                 )
 
                 # Inserisce nuovo record se non esiste (non sovrascrive manuali)
                 cursor.execute(
                     """
-                    INSERT OR IGNORE INTO precipitation (date, is_rain, updated_at, manual)
-                    VALUES (?, ?, ?, FALSE)
+                    INSERT OR IGNORE INTO precipitation (date, is_rain, rain_mm, updated_at, manual)
+                    VALUES (?, ?, ?, ?, FALSE)
                 """,
-                    (day, is_rain, now_iso),
+                    (day, is_rain, rain_mm, now_iso),
                 )
 
             conn.commit()
@@ -88,7 +89,7 @@ def update_db_from_telegram() -> None:
     """
     Aggiorna il database quando l'utente conferma manualmente l'irrigazione.
 
-    Imposta is_rain=True e manual=True per la data odierna,
+    Imposta is_rain=True, rain_mm=NULL e manual=True per la data odierna,
     segnalando che oggi ha piovuto (irrigazione effettuata).
     """
     db_path = get_database_settings()["name"]
@@ -97,9 +98,10 @@ def update_db_from_telegram() -> None:
             cursor = conn.cursor()
 
             cursor.execute(
-                "UPDATE precipitation SET is_rain = ?, manual = ?, updated_at = ? WHERE date = ?",
+                "UPDATE precipitation SET is_rain = ?, rain_mm = ?, manual = ?, updated_at = ? WHERE date = ?",
                 (
                     True,  # Ha piovuto (irrigato)
+                    None,  # Quantità pioggia non nota per manuale
                     True,  # Modifica manuale
                     datetime.now(timezone.utc).isoformat(),
                     datetime.now().date().isoformat(),
@@ -148,8 +150,9 @@ def get_daily_precipitation() -> None:
         dates = data["daily"]["time"]                    # Lista date ISO
         precipitation = data["daily"]["precipitation_sum"]  # Lista mm pioggia per data
 
-        # Converte in dict: {data: ha_piovuto} basandosi sulla soglia
-        result = dict(zip(dates, [p > irr_settings["rain_threshold_mm"] for p in precipitation]))
+        # Converte in dict: {data: (ha_piovuto, rain_mm)} basandosi sulla soglia
+        is_rain_list = [p > irr_settings["rain_threshold_mm"] for p in precipitation]
+        result = dict(zip(dates, zip(is_rain_list, precipitation)))
         save_to_db_from_api(result)
 
     except requests.RequestException as exc:
@@ -158,27 +161,37 @@ def get_daily_precipitation() -> None:
         raise RuntimeError(f"Errore parsing risposta meteo: {exc}") from exc
 
 
-def get_precipitation_from_db() -> Dict[str, bool]:
+def get_all_precipitation_data() -> list[dict]:
     """
-    Recupera tutti i dati di precipitazione dal database.
+    Recupera tutti i dati di precipitazione dal database con dettagli completi.
 
     Returns:
-        Dict[str, bool]: {data_iso: ha_piovuto_bool} per tutte le date nel DB
+        list[dict]: Lista di dizionari con chiavi 'date', 'is_rain', 'rain_mm', 'manual', 'updated_at'
 
     Raises:
         RuntimeError: Se ci sono errori nella lettura del database
     """
+
     try:
         get_daily_precipitation()  # Aggiorna i dati meteo prima di leggere dal DB
     except RuntimeError as exc:
         logger.warning(f"Impossibile aggiornare i dati meteo: {exc}")
-
+        
     db_path = get_database_settings()["name"]
     try:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT date, is_rain FROM precipitation")
+            cursor.execute("SELECT date, is_rain, rain_mm, manual, updated_at FROM precipitation ORDER BY date")
             rows = cursor.fetchall()
-        return {row[0]: bool(row[1]) for row in rows}
+        return [
+            {
+                "date": row[0],
+                "is_rain": bool(row[1]),
+                "rain_mm": row[2],
+                "manual": bool(row[3]),
+                "updated_at": row[4],
+            }
+            for row in rows
+        ]
     except sqlite3.Error as exc:
         raise RuntimeError(f"Errore leggendo dal DB: {exc}") from exc

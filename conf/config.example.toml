@@ -8,6 +8,8 @@ token = "your-telegram-bot-token"
 log_level = "DEBUG"
 # Se true, ricevi notifiche anche quando l'irrigazione NON è necessaria
 not_necessary_irrigation_confirm = true
+# Giorni da recuperare con il comando /db
+days_read_from_db = 7
 
 # === CONFIGURAZIONE METEO ===
 [weather]
