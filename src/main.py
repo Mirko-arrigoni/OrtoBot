@@ -88,7 +88,9 @@ async def db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         if not show_all:
             # Filtra ultimi N giorni (da config)
-            days = get_telegram_settings().get("days_read_from_db", 7)
+            days = (
+                get_telegram_settings().get("days_read_from_db", 7) - 1
+            )  # -1 perché include oggi
             n_days_ago = (datetime.now() - timedelta(days=days)).date().isoformat()
             data = [d for d in data if d["date"] >= n_days_ago]
 
@@ -97,12 +99,14 @@ async def db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             return
 
         # Formatta i dati
+        today_iso = datetime.now().date().isoformat()
         lines = ["📅 Dati precipitazione:"]
         for d in data:
-            rain_str = f"{d['rain_mm']}mm" if d["rain_mm"] is not None else ""
-            manual_str = " (manuale)" if d["manual"] else ""
+            date_str = datetime.fromisoformat(d["date"]).strftime("%d-%m-%Y")
+            rain_str = f"{(d['rain_mm'])}mm" if d["rain_mm"] is not None else ""
+            manual_str = "(manuale)" if d["manual"] else ""
             lines.append(
-                f"{d['date']}: {'✅' if d['is_rain'] else '❌'} ({rain_str}){manual_str}"
+                f"{date_str if d['date'] != today_iso else '-- O G G I --'} {'✅' if d['is_rain'] else '❌'} {rain_str}{manual_str}"
             )
 
         message = "\n".join(lines)
