@@ -10,6 +10,8 @@ log_level = "DEBUG"
 not_necessary_irrigation_confirm = true
 # Giorni da recuperare con il comando /db
 days_read_from_db = 7
+# Orari ai quali iniviare se necessaria l'irrigazione
+notification_time = ["07:00", "18:00"]
 
 # === CONFIGURAZIONE METEO ===
 [weather]

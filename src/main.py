@@ -13,7 +13,8 @@ e un database SQLite per memorizzare i dati di precipitazione.
 
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+from zoneinfo import ZoneInfo
 
 from telegram import Update
 from telegram.ext import (
@@ -28,6 +29,7 @@ from data_manager import (
     reset_today_precipitation,
     update_db_from_telegram,
     get_all_precipitation_data,
+    get_daily_precipitation,
 )
 
 # === CONFIGURAZIONE LOGGING ===
@@ -199,14 +201,27 @@ def main() -> int:
         app.add_handler(CommandHandler("db", db_command))
         app.add_handler(CommandHandler("reset", reset_command))
 
-        # Pianifica il controllo periodico dell'irrigazione
+        # Refresh dati precipitazione ogni X ore (configurato)
         app.job_queue.run_repeating(
-            irrigation_check,
+            get_daily_precipitation,
             interval=get_weather_settings()["interval_check"],  # Ogni X secondi
-            first=5,  # Aspetta 10 secondi prima del primo controllo
+            first=30,  # Aspetta 30 secondi prima del primo controllo
+            name="daily_precipitation_job",
         )
 
-        logger.info(
+        times = get_telegram_settings()["notification_time"]
+
+        # Per ogni orario configurato, pianifica un job per controllare l'irrigazione e inviare le notifiche
+        for t in times:
+            hour, minute = map(int, t.strip().split(":"))
+
+            app.job_queue.run_daily(
+                irrigation_check,
+                time=time(hour=hour, minute=minute, tzinfo=ZoneInfo("Europe/Rome")),
+                name=f"irrigation_check_{hour}_{minute}",
+            )
+
+        logger.debug(
             f"Bot avviato: comandi /w e /db disponibili, job pianificato ogni {get_weather_settings()['interval_check'] // 3600} ore"
         )
         app.run_polling()  # Avvia il loop di ricezione messaggi

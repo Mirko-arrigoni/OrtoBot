@@ -141,7 +141,7 @@ def reset_today_precipitation() -> None:
         raise RuntimeError(f"Errore resettando il DB: {exc}") from exc
 
 
-def get_daily_precipitation() -> None:
+async def get_daily_precipitation() -> None:
     """
     Recupera i dati di precipitazione giornaliera dall'API Open-Meteo e li salva nel DB.
 
@@ -200,16 +200,22 @@ def get_all_precipitation_data() -> list[dict]:
     Raises:
         RuntimeError: Se ci sono errori nella lettura del database
     """
-
-    try:
-        get_daily_precipitation()  # Aggiorna i dati meteo prima di leggere dal DB
-    except RuntimeError as exc:
-        logger.warning(f"Impossibile aggiornare i dati meteo: {exc}")
-
     db_path = get_database_settings()["name"]
     try:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
+
+            # # Controlla se la tabella precipitation ha dati
+            # cursor.execute("SELECT COUNT(*) FROM precipitation")
+            # count = cursor.fetchone()[0]
+            # if count != 0:
+            #     return
+            # else:
+            #     try:
+            #         get_daily_precipitation()  # Aggiorna i dati meteo se la tabella è vuota
+            #     except RuntimeError as exc:
+            #         logger.warning(f"Impossibile aggiornare i dati meteo: {exc}")
+
             cursor.execute(
                 "SELECT date, is_rain, rain_mm, manual, updated_at FROM precipitation ORDER BY date"
             )
