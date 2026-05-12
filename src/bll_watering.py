@@ -31,8 +31,12 @@ def should_irrigate() -> bool:
     try:
         # Carica le impostazioni di irrigazione dal config
         config = get_irrigation_settings()
-        gg_passati = config["range_past_days"]  # Giorni senza pioggia per attivare irrigazione
-        gg_futuri = config["range_future_days"]  # Giorni futuri senza pioggia per confermare irrigazione
+        gg_passati = config[
+            "range_past_days"
+        ]  # Giorni senza pioggia per attivare irrigazione
+        gg_futuri = config[
+            "range_future_days"
+        ]  # Giorni futuri senza pioggia per confermare irrigazione
 
         today = date.today()
         precipitation_data = get_all_precipitation_data()
@@ -42,7 +46,8 @@ def should_irrigate() -> bool:
         past_precipitation = [
             date.fromisoformat(day)  # Converte stringa ISO in oggetto date
             for day, is_rain in precipitation_calendar.items()
-            if is_rain and date.fromisoformat(day) < today  # Solo giorni di pioggia passati
+            if is_rain
+            and date.fromisoformat(day) < today  # Solo giorni di pioggia passati
         ]
 
         # Filtra le date di pioggia nel futuro (oggi incluso)
@@ -69,9 +74,7 @@ def should_irrigate() -> bool:
         # 2. Non pioverà presto (next_rain_date is None) OPPURE la prossima pioggia è troppo lontana
         should_water = (
             last_rain_date is None or (today - last_rain_date).days > gg_passati
-        ) and (
-            next_rain_date is None or (next_rain_date - today).days > gg_futuri
-        )
+        ) and (next_rain_date is None or (next_rain_date - today).days > gg_futuri)
 
         # Logga la decisione per debug
         logger.debug(

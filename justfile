@@ -11,4 +11,4 @@ clean:
 
 format: fmt
 fmt:
-	uv run -m black --target-version py311 src/
+	uv run -m black --target-version py313 src/

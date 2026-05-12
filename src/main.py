@@ -13,7 +13,6 @@ e un database SQLite per memorizzare i dati di precipitazione.
 
 import logging
 import sys
-import token
 from datetime import datetime, timedelta
 
 from telegram import Update
@@ -25,7 +24,11 @@ from telegram.ext import (
 
 from bll_watering import should_irrigate
 from config_reader import get_telegram_settings, get_weather_settings, get_current_dir
-from data_manager import update_db_from_telegram, get_all_precipitation_data
+from data_manager import (
+    reset_today_precipitation,
+    update_db_from_telegram,
+    get_all_precipitation_data,
+)
 
 # === CONFIGURAZIONE LOGGING ===
 # Legge il livello di log dalla configurazione, WARNING di default se non specificato o errato
@@ -34,9 +37,10 @@ log_level = getattr(logging, log_level_str, logging.WARNING)
 
 # Configura il logging globale per tutti i moduli
 logging.basicConfig(
-    filename=get_current_dir().parent / "log.txt",  # File di log nella root del progetto
+    filename=get_current_dir().parent
+    / "log.txt",  # File di log nella root del progetto
     encoding="utf-8",
-    filemode="a",                                   # Append mode (accumula i log)
+    filemode="a",  # Append mode (accumula i log)
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",  # Formato log
     level=log_level,  # Livello globale letto da config
 )
@@ -49,7 +53,8 @@ logging.getLogger("telegram").setLevel(logging.CRITICAL)
 logging.getLogger("httpx").setLevel(logging.ERROR)
 
 
-async def w_command(update: Update) -> None:
+# async def w_command(update: Update) -> None:
+async def w_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Gestore del comando /w (watering).
 
@@ -67,7 +72,7 @@ async def w_command(update: Update) -> None:
         )
 
 
-async def db_command(update: Update) -> None:
+async def db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Gestore del comando /db.
 
@@ -94,9 +99,11 @@ async def db_command(update: Update) -> None:
         # Formatta i dati
         lines = ["📅 Dati precipitazione:"]
         for d in data:
-            rain_str = f"{d['rain_mm']}mm" if d['rain_mm'] is not None else "N/A"
-            manual_str = " (manuale)" if d['manual'] else ""
-            lines.append(f"{d['date']}: {'Sì' if d['is_rain'] else 'No'} ({rain_str}){manual_str}")
+            rain_str = f"{d['rain_mm']}mm" if d["rain_mm"] is not None else ""
+            manual_str = " (manuale)" if d["manual"] else ""
+            lines.append(
+                f"{d['date']}: {'✅' if d['is_rain'] else '❌'} ({rain_str}){manual_str}"
+            )
 
         message = "\n".join(lines)
         await update.message.reply_text(message)
@@ -104,6 +111,24 @@ async def db_command(update: Update) -> None:
         logger.exception("Errore durante il comando /db")
         await update.message.reply_text(
             "❌ Errore durante la lettura del DB. Controlla i log del bot."
+        )
+
+
+async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Gestore del comando /reset.
+
+    Resetta i dati di precipitazione per oggi, segnando che non ha piovuto.
+    Utile se si è commesso un errore con il comando /w o per test.
+
+    """
+    try:
+        reset_today_precipitation()  # Resetta i dati di oggi nel DB
+        await update.message.reply_text("✅ Dati di oggi resettati!")
+    except Exception:
+        logger.exception("Errore durante il reset da Telegram")
+        await update.message.reply_text(
+            "❌ Errore durante il reset. Controlla i log del bot."
         )
 
 
@@ -118,12 +143,16 @@ async def irrigation_check(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         result = should_irrigate()  # Logica: deve irrigare?
         chat_id = get_telegram_settings()["chat_id"]
-        necessary_confirm = bool(get_telegram_settings().get("not_necessary_irrigation_confirm", False))
+        necessary_confirm = bool(
+            get_telegram_settings().get("not_necessary_irrigation_confirm", False)
+        )
 
         # Invia messaggio solo se irrigazione necessaria, o se configurato per notificare anche quando non necessaria
         if result or necessary_confirm:
             message = (
-                "💧 Irrigazione NECESSARIA" if result else "🌧️ Irrigazione NON necessaria"
+                "💧 Irrigazione NECESSARIA"
+                if result
+                else "🌧️ Irrigazione NON necessaria"
             )
             await context.bot.send_message(chat_id=chat_id, text=message)
     except Exception:
@@ -164,6 +193,7 @@ def main() -> int:
         # Registra i comandi
         app.add_handler(CommandHandler("w", w_command))
         app.add_handler(CommandHandler("db", db_command))
+        app.add_handler(CommandHandler("reset", reset_command))
 
         # Pianifica il controllo periodico dell'irrigazione
         app.job_queue.run_repeating(
@@ -172,7 +202,9 @@ def main() -> int:
             first=5,  # Aspetta 10 secondi prima del primo controllo
         )
 
-        logger.info(f"Bot avviato: comandi /w e /db disponibili, job pianificato ogni {get_weather_settings()['interval_check'] // 3600} ore")
+        logger.info(
+            f"Bot avviato: comandi /w e /db disponibili, job pianificato ogni {get_weather_settings()['interval_check'] // 3600} ore"
+        )
         app.run_polling()  # Avvia il loop di ricezione messaggi
         return 0
     except Exception:

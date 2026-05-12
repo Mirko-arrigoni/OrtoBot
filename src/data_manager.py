@@ -113,6 +113,34 @@ def update_db_from_telegram() -> None:
         raise RuntimeError(f"Errore aggiornando il DB: {exc}") from exc
 
 
+def reset_today_precipitation() -> None:
+    """
+    Resetta i dati di precipitazione per la data odierna.
+
+    Imposta is_rain=False, rain_mm=NULL e manual=False per la data odierna,
+    segnalando che oggi non ha piovuto (reset manuale).
+    """
+    db_path = get_database_settings()["name"]
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                "UPDATE precipitation SET is_rain = ?, rain_mm = ?, manual = ?, updated_at = ? WHERE date = ?",
+                (
+                    False,  # Non ha piovuto
+                    0.0,  # Quantità pioggia non nota
+                    False,  # Non è una modifica manuale di irrigazione
+                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now().date().isoformat(),
+                ),
+            )
+
+            conn.commit()
+    except sqlite3.Error as exc:
+        raise RuntimeError(f"Errore resettando il DB: {exc}") from exc
+
+
 def get_daily_precipitation() -> None:
     """
     Recupera i dati di precipitazione giornaliera dall'API Open-Meteo e li salva nel DB.
@@ -131,12 +159,13 @@ def get_daily_precipitation() -> None:
 
         # Parametri per la chiamata API Open-Meteo
         params = {
-            "latitude": wtr_settings["latitude"],           # Latitudine posizione
-            "longitude": wtr_settings["longitude"],         # Longitudine posizione
-            "daily": "precipitation_sum",                   # Richiedi somma precipitazione giornaliera
-            "timezone": "Europe/Rome",                      # Fuso orario italiano
-            "forecast_days": irr_settings["range_future_days"] + 1,  # Giorni previsione + oggi
-            "past_days": irr_settings["range_past_days"],   # Giorni passati da includere
+            "latitude": wtr_settings["latitude"],  # Latitudine posizione
+            "longitude": wtr_settings["longitude"],  # Longitudine posizione
+            "daily": "precipitation_sum",  # Richiedi somma precipitazione giornaliera
+            "timezone": "Europe/Rome",  # Fuso orario italiano
+            "forecast_days": irr_settings["range_future_days"]
+            + 1,  # Giorni previsione + oggi
+            "past_days": irr_settings["range_past_days"],  # Giorni passati da includere
         }
 
         # Chiamata API con timeout di 10 secondi
@@ -147,7 +176,7 @@ def get_daily_precipitation() -> None:
 
         # Parsing della risposta JSON
         data = response.json()
-        dates = data["daily"]["time"]                    # Lista date ISO
+        dates = data["daily"]["time"]  # Lista date ISO
         precipitation = data["daily"]["precipitation_sum"]  # Lista mm pioggia per data
 
         # Converte in dict: {data: (ha_piovuto, rain_mm)} basandosi sulla soglia
@@ -176,12 +205,14 @@ def get_all_precipitation_data() -> list[dict]:
         get_daily_precipitation()  # Aggiorna i dati meteo prima di leggere dal DB
     except RuntimeError as exc:
         logger.warning(f"Impossibile aggiornare i dati meteo: {exc}")
-        
+
     db_path = get_database_settings()["name"]
     try:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT date, is_rain, rain_mm, manual, updated_at FROM precipitation ORDER BY date")
+            cursor.execute(
+                "SELECT date, is_rain, rain_mm, manual, updated_at FROM precipitation ORDER BY date"
+            )
             rows = cursor.fetchall()
         return [
             {
