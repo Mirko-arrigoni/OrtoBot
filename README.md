@@ -41,6 +41,7 @@ ALTRIMENTI → Irrigazione NON necessaria
 ### Prerequisiti
 
 - Python 3.11 o superiore
+- `uv` ([documentazione ufficiale per installazione](https://docs.astral.sh/uv/getting-started/installation/))
 - Token Bot Telegram (da [@BotFather](https://t.me/botfather))
 - Chat ID Telegram (vedi sezione Configurazione)
 
@@ -52,44 +53,21 @@ ALTRIMENTI → Irrigazione NON necessaria
    cd orto-bot
    ```
 
-2. **Installa `uv`** (consigliato)
+2. **Sincronizza dipendenze con `uv`**
    ```bash
-   pip install uv
+   uv sync
    ```
 
-3. **Crea ambiente virtuale**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # Linux/Mac
-   # oppure: venv\Scripts\activate  # Windows
-   ```
-
-4. **Installa dipendenze**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-5. **Configura il bot**
+3. **Configura il bot**
    ```bash
    cp conf/config.example.toml conf/env.toml
    # Modifica conf/env.toml con i tuoi parametri
    ```
 
-6. **Avvia il bot**
+4. **Avvia il bot**
    ```bash
-   python src/main.py
+   uv run src/main.py
    ```
-
-### Setup con `uv`
-
-In alternativa a `venv` + `pip`, puoi usare direttamente `uv`:
-
-```bash
-uv sync
-cp conf/config.example.toml conf/env.toml
-# Modifica conf/env.toml con i tuoi parametri
-uv run src/main.py
-```
 
 ## ⚙️ Configurazione
 
