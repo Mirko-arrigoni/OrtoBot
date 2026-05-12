@@ -52,28 +52,44 @@ ALTRIMENTI → Irrigazione NON necessaria
    cd orto-bot
    ```
 
-2. **Crea ambiente virtuale**
+2. **Installa `uv`** (consigliato)
+   ```bash
+   pip install uv
+   ```
+
+3. **Crea ambiente virtuale**
    ```bash
    python -m venv venv
    source venv/bin/activate  # Linux/Mac
    # oppure: venv\Scripts\activate  # Windows
    ```
 
-3. **Installa dipendenze**
+4. **Installa dipendenze**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Configura il bot**
+5. **Configura il bot**
    ```bash
    cp conf/config.example.toml conf/env.toml
    # Modifica conf/env.toml con i tuoi parametri
    ```
 
-5. **Avvia il bot**
+6. **Avvia il bot**
    ```bash
    python src/main.py
    ```
+
+### Setup con `uv`
+
+In alternativa a `venv` + `pip`, puoi usare direttamente `uv`:
+
+```bash
+uv sync
+cp conf/config.example.toml conf/env.toml
+# Modifica conf/env.toml con i tuoi parametri
+uv run src/main.py
+```
 
 ## ⚙️ Configurazione
 
