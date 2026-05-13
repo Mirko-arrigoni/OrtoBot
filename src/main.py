@@ -205,7 +205,7 @@ def main() -> int:
         app.job_queue.run_repeating(
             get_daily_precipitation,
             interval=get_weather_settings()["interval_check"],  # Ogni X secondi
-            first=30,  # Aspetta 30 secondi prima del primo controllo
+            first=5,  # Aspetta 30 secondi prima del primo controllo
             name="daily_precipitation_job",
         )
 

@@ -19,6 +19,8 @@ from config_reader import (
     get_weather_settings,
 )
 
+from telegram.ext import ContextTypes
+
 # Logger per questo modulo
 logger = logging.getLogger(__name__)
 
@@ -141,7 +143,7 @@ def reset_today_precipitation() -> None:
         raise RuntimeError(f"Errore resettando il DB: {exc}") from exc
 
 
-async def get_daily_precipitation() -> None:
+async def get_daily_precipitation(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Recupera i dati di precipitazione giornaliera dall'API Open-Meteo e li salva nel DB.
 
@@ -167,6 +169,14 @@ async def get_daily_precipitation() -> None:
             + 1,  # Giorni previsione + oggi
             "past_days": irr_settings["range_past_days"],  # Giorni passati da includere
         }
+
+        # import httpx
+
+        # async with httpx.AsyncClient() as client:
+        #     response = await client.get(
+        #         wtr_settings["api_url"],
+        #         params=params,
+        #         timeout=10,)
 
         # Chiamata API con timeout di 10 secondi
         response = requests.get(wtr_settings["api_url"], params=params, timeout=10)
