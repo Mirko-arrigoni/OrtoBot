@@ -230,6 +230,7 @@ def get_all_precipitation_data() -> list[dict]:
                 "SELECT date, is_rain, rain_mm, manual, updated_at FROM precipitation ORDER BY date"
             )
             rows = cursor.fetchall()
+            
         return [
             {
                 "date": row[0],
