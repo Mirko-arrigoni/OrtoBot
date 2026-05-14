@@ -89,11 +89,15 @@ async def db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         data = get_all_precipitation_data()
 
         if not show_all:
-            # Filtra ultimi N giorni (da config)
+            # Filtra ultimi N giorni (da config), partendo dalla data massima nel DB
             days = (
                 get_telegram_settings().get("days_read_from_db", 7) - 1
             )  # -1 perché include oggi
-            n_days_ago = (datetime.now() - timedelta(days=days)).date().isoformat()
+            if data:
+                max_date = max(d["date"] for d in data)
+                n_days_ago = (datetime.fromisoformat(max_date) - timedelta(days=days)).date().isoformat()
+            else:
+                n_days_ago = (datetime.now() - timedelta(days=days)).date().isoformat()
             data = [d for d in data if d["date"] >= n_days_ago]
 
         if not data:

@@ -78,4 +78,7 @@ def get_irrigation_settings() -> dict:
 
 def get_database_settings() -> dict:
     """Ritorna le impostazioni relative al database (nome file, etc.)."""
-    return _get_config_section("database")
+    section = _get_config_section("database")
+    # Risolve percorso relativo altrimenti da problemi se eseguito in autostart da systemd o comunque da root
+    section["name"] = get_current_dir().parent / section["name"]
+    return section
