@@ -238,17 +238,6 @@ def get_all_precipitation_data() -> list[dict]:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
 
-            # # Controlla se la tabella precipitation ha dati
-            # cursor.execute("SELECT COUNT(*) FROM precipitation")
-            # count = cursor.fetchone()[0]
-            # if count != 0:
-            #     return
-            # else:
-            #     try:
-            #         get_daily_precipitation()  # Aggiorna i dati meteo se la tabella è vuota
-            #     except RuntimeError as exc:
-            #         logger.warning(f"Impossibile aggiornare i dati meteo: {exc}")
-
             cursor.execute(
                 "SELECT date, is_rain, rain_mm, manual, updated_at FROM precipitation ORDER BY date"
             )
@@ -266,3 +255,27 @@ def get_all_precipitation_data() -> list[dict]:
         ]
     except sqlite3.Error as exc:
         raise RuntimeError(f"Errore leggendo dal DB: {exc}") from exc
+
+def create_db_if_not_exists() -> None:
+    """
+    Crea la tabella precipitation nel database se non esiste già.
+
+    Questo è utile per assicurarsi che il database sia pronto all'uso
+    prima di tentare di salvare o leggere dati.
+    """
+    db_path = get_database_settings()["name"]
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS precipitation (
+                    date TEXT PRIMARY KEY,
+                    is_rain BOOLEAN,
+                    rain_mm REAL,
+                    updated_at TEXT,
+                    manual BOOLEAN DEFAULT FALSE
+                )
+            """)
+            conn.commit()
+    except sqlite3.Error as exc:
+        raise RuntimeError(f"Errore creando la tabella nel DB: {exc}") from exc

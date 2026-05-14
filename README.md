@@ -40,7 +40,7 @@ ALTRIMENTI → Irrigazione NON necessaria
 
 ### Prerequisiti
 
-- Python 3.11 o superiore
+- Python 3.13 o superiore
 - `uv` ([documentazione ufficiale per installazione](https://docs.astral.sh/uv/getting-started/installation/))
 - Token Bot Telegram (da [@BotFather](https://t.me/botfather))
 - Chat ID Telegram (vedi sezione Configurazione)
@@ -76,34 +76,36 @@ Copia `conf/config.example.toml` in `conf/env.toml` e configura:
 ### Telegram
 ```toml
 [telegram]
-chat_id = 123456789          # Il tuo Chat ID Telegram
-token = "your-bot-token"     # Token dal BotFather
-log_level = "INFO"           # DEBUG, INFO, WARNING, ERROR
-not_necessary_irrigation_confirm = false  # Ricevi notifiche anche quando non serve irrigare?
+chat_id = 123456789                    # Il tuo Chat ID Telegram
+token = "your-bot-token"               # Token dal BotFather
+log_level = "INFO"                     # DEBUG, INFO, WARNING, ERROR, CRITICAL
+not_necessary_irrigation_confirm = true  # Ricevi notifiche anche quando non serve irrigare?
+days_read_from_db = 7                  # Giorni da recuperare con il comando /db (default: 7)
+notification_time = ["07:00", "18:00"] # Orari per le notifiche di irrigazione
 ```
 
 ### Meteo
 ```toml
 [weather]
-latitude = "45.20"           # Latitudine della tua posizione
-longitude = "9.34"           # Longitudine della tua posizione
-api_url = "https://api.open-meteo.com/v1/forecast"
-rain_threshold_mm = 3        # Quanti mm di pioggia contano come "pioggia"
-interval_check = 14400       # Secondi tra controlli automatici (4 ore)
+latitude = "45.20"                        # Latitudine della tua posizione
+longitude = "9.34"                        # Longitudine della tua posizione
+api_url = "https://api.open-meteo.com/v1/forecast"  # Endpoint API Open-Meteo
+rain_threshold_mm = 3                     # Soglia pioggia (mm) per classificare come "pioggia"
+interval_check = 14400                    # Secondi tra controlli automatici (4 ore)
 ```
 
 ### Irrigazione
 ```toml
 [watering]
-range_past_days = 4          # Giorni senza pioggia per considerare irrigazione
-range_future_days = 2        # Giorni previsione per evitare irrigazione inutile
-rain_threshold_mm = 6        # Soglia pioggia per bloccare irrigazione
+range_past_days = 4          # Giorni senza pioggia per attivare irrigazione
+range_future_days = 2        # Giorni di previsione per evitare irrigazione inutile
+rain_threshold_mm = 6        # Soglia pioggia (mm) per bloccare l'irrigazione
 ```
 
 ### Database
 ```toml
 [database]
-name = "weather.db"          # File SQLite per i dati
+name = "weather.db"          # Nome file SQLite per storicizzare precipitazioni
 ```
 
 ## 📱 Utilizzo
@@ -111,14 +113,21 @@ name = "weather.db"          # File SQLite per i dati
 ### Comandi Telegram
 
 - **`/start`**: Avvia il bot (automatico)
-- **`/w`**: Conferma che hai irrigato oggi
+- **`/today`**: Controlla se oggi è necessario irrigare
+- **`/w`**: Registra che hai irrigato manualmente oggi
+- **`/db`**: Visualizza i dati di precipitazione degli ultimi 7 giorni
+  - `/db all`: Mostra tutti i dati dal database
+- **`/reset`**: Resetta i dati di precipitazione per oggi
+- **`/update`**: Forza un aggiornamento dei dati meteo
 
 ### Notifiche Automatiche
 
-Il bot invia messaggi ogni 4 ore (configurabile):
+Il bot controlla automaticamente ogni X ore (configurabile via `interval_check`):
 
-- 💧 **"Irrigazione NECESSARIA"** - Devi irrigare
-- 🌧️ **"Irrigazione NON necessaria"** - Non serve per ora
+- 💧 **Irrigazione NECESSARIA** - Devi irrigare oggi
+- 🌧️ **Irrigazione NON necessaria** - Non serve per ora
+
+Le notifiche vengono inviate negli orari configurati in `notification_time`.
 
 ### Ottieni Chat ID
 

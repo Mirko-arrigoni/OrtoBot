@@ -30,6 +30,7 @@ from data_manager import (
     update_db_from_telegram,
     get_all_precipitation_data,
     get_daily_precipitation,
+    create_db_if_not_exists
 )
 
 # === CONFIGURAZIONE LOGGING ===
@@ -141,6 +142,43 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "❌ Errore durante il reset. Controlla i log del bot."
         )
 
+async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Gestore del comando /today.
+
+    Informa se oggi è necessario irrigare basandosi sui dati attuali.
+
+    """
+    try:
+        result = should_irrigate()  # Logica: deve irrigare?
+        message = (
+            "💧 Oggi è NECESSARIO irrigare"
+            if result
+            else "🌧️ Oggi NON è necessario irrigare"
+        )
+        await update.message.reply_text(message)
+    except Exception:
+        logger.exception("Errore durante il comando /today")
+        await update.message.reply_text(
+            "❌ Errore durante il controllo di oggi. Controlla i log del bot."
+        )
+
+async def update_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Gestore del comando /update.
+
+    Forza un aggiornamento dei dati di precipitazione dal servizio meteo.
+    Utile per test o se si sospettano dati obsoleti.
+
+    """
+    try:
+        await get_daily_precipitation(context)  # Forza aggiornamento dati
+        await update.message.reply_text("✅ Dati aggiornati!")
+    except Exception:
+        logger.exception("Errore durante l'aggiornamento da Telegram")
+        await update.message.reply_text(
+            "❌ Errore durante l'aggiornamento. Controlla i log del bot."
+        )
 
 async def irrigation_check(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -204,12 +242,16 @@ def main() -> int:
         app.add_handler(CommandHandler("w", w_command))
         app.add_handler(CommandHandler("db", db_command))
         app.add_handler(CommandHandler("reset", reset_command))
+        app.add_handler(CommandHandler("today", today_command))
+        app.add_handler(CommandHandler("update", update_command))
+
+        create_db_if_not_exists()  # Assicurati che il DB esista prima di avviare il bot
 
         # Refresh dati precipitazione ogni X ore (configurato)
         app.job_queue.run_repeating(
             get_daily_precipitation,
             interval=get_weather_settings()["interval_check"],  # Ogni X secondi
-            first=5,  # Aspetta 30 secondi prima del primo controllo
+            first=30,  # Aspetta 30 secondi prima del primo controllo
             name="daily_precipitation_job",
         )
 
