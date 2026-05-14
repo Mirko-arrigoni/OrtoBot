@@ -53,19 +53,10 @@ def save_to_db_from_api(days: list[DailyPrecipitation]) -> None:
     """
     db_path = get_database_settings()["name"]
     try:
+        create_db_if_not_exists()  # Assicurati che la tabella esista prima di salvare
+        
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-
-            # Crea la tabella se non esiste
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS precipitation (
-                    date TEXT PRIMARY KEY,        -- Data in formato ISO (YYYY-MM-DD)
-                    is_rain BOOLEAN,              -- True se ha piovuto quel giorno
-                    rain_mm REAL,                 -- Quantità di pioggia in mm (opzionale)
-                    updated_at TEXT,              -- Timestamp ultima modifica (ISO)
-                    manual BOOLEAN DEFAULT FALSE  -- True se modificato manualmente
-                )
-            """)
 
             now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -269,11 +260,11 @@ def create_db_if_not_exists() -> None:
             cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS precipitation (
-                    date TEXT PRIMARY KEY,
-                    is_rain BOOLEAN,
-                    rain_mm REAL,
-                    updated_at TEXT,
-                    manual BOOLEAN DEFAULT FALSE
+                    date TEXT PRIMARY KEY,        -- Data in formato ISO (YYYY-MM-DD)
+                    is_rain BOOLEAN,              -- True se ha piovuto quel giorno
+                    rain_mm REAL,                 -- Quantità di pioggia in mm (opzionale)
+                    updated_at TEXT,              -- Timestamp ultima modifica (ISO)
+                    manual BOOLEAN DEFAULT FALSE  -- True se modificato manualmente
                 )
             """)
             conn.commit()
