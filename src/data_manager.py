@@ -6,8 +6,8 @@ Include funzioni per salvare, aggiornare e recuperare dati di precipitazione.
 
 import logging
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict
 
 import requests
 import requests_cache
@@ -31,7 +31,14 @@ cache_session = requests_cache.CachedSession(".cache", expire_after=3600)
 retry_session = retry(cache_session, retries=3, backoff_factor=0.2)
 
 
-def save_to_db_from_api(days: Dict[str, tuple[bool, float]]) -> None:
+@dataclass
+class DailyPrecipitation:
+    date: str
+    is_rain: bool
+    rain_mm: float
+
+
+def save_to_db_from_api(days: list[DailyPrecipitation]) -> None:
     """
     Salva nel database i dati di precipitazione ricevuti dall'API meteo.
 
@@ -39,7 +46,7 @@ def save_to_db_from_api(days: Dict[str, tuple[bool, float]]) -> None:
     con timestamp di aggiornamento e flag per dati manuali vs automatici.
 
     Args:
-        days: Dizionario {data_iso: (ha_piovuto_bool, rain_mm)}
+        days: Lista di oggetti con data, flag pioggia e quantità in mm
 
     Raises:
         RuntimeError: Se ci sono errori nel database
@@ -62,7 +69,7 @@ def save_to_db_from_api(days: Dict[str, tuple[bool, float]]) -> None:
 
             now_iso = datetime.now(timezone.utc).isoformat()
 
-            for day, (is_rain, rain_mm) in days.items():
+            for day_data in days:
                 # Aggiorna solo record automatici (non manuali) per evitare sovrascritture
                 cursor.execute(
                     """
@@ -70,7 +77,12 @@ def save_to_db_from_api(days: Dict[str, tuple[bool, float]]) -> None:
                     SET is_rain = ?, rain_mm = ?, updated_at = ?
                     WHERE date = ? AND manual = FALSE
                 """,
-                    (is_rain, rain_mm, now_iso, day),
+                    (
+                        day_data.is_rain,
+                        day_data.rain_mm,
+                        now_iso,
+                        day_data.date,
+                    ),
                 )
 
                 # Inserisce nuovo record se non esiste (non sovrascrive manuali)
@@ -79,7 +91,12 @@ def save_to_db_from_api(days: Dict[str, tuple[bool, float]]) -> None:
                     INSERT OR IGNORE INTO precipitation (date, is_rain, rain_mm, updated_at, manual)
                     VALUES (?, ?, ?, ?, FALSE)
                 """,
-                    (day, is_rain, rain_mm, now_iso),
+                    (
+                        day_data.date,
+                        day_data.is_rain,
+                        day_data.rain_mm,
+                        now_iso,
+                    ),
                 )
 
             conn.commit()
@@ -189,9 +206,15 @@ async def get_daily_precipitation(context: ContextTypes.DEFAULT_TYPE) -> None:
         dates = data["daily"]["time"]  # Lista date ISO
         precipitation = data["daily"]["precipitation_sum"]  # Lista mm pioggia per data
 
-        # Converte in dict: {data: (ha_piovuto, rain_mm)} basandosi sulla soglia
-        is_rain_list = [p > irr_settings["rain_threshold_mm"] for p in precipitation]
-        result = dict(zip(dates, zip(is_rain_list, precipitation)))
+        # Converte in oggetti tipizzati basandosi sulla soglia
+        result = [
+            DailyPrecipitation(
+                date=day,
+                is_rain=rain_mm > irr_settings["rain_threshold_mm"],
+                rain_mm=rain_mm,
+            )
+            for day, rain_mm in zip(dates, precipitation)
+        ]
         save_to_db_from_api(result)
 
     except requests.RequestException as exc:
