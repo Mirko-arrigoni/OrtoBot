@@ -7,7 +7,8 @@ Include funzioni per salvare, aggiornare e recuperare dati di precipitazione.
 import logging
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import requests
 import requests_cache
@@ -23,6 +24,7 @@ from telegram.ext import ContextTypes
 
 # Logger per questo modulo
 logger = logging.getLogger(__name__)
+ROME_TZ = ZoneInfo("Europe/Rome")
 
 # Setup del client HTTP con cache e retry automatico
 # Cache: salva le risposte per 1 ora per evitare chiamate ripetute
@@ -58,7 +60,7 @@ def save_to_db_from_api(days: list[DailyPrecipitation]) -> None:
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
 
-            now_iso = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(ROME_TZ).isoformat()
 
             for day_data in days:
                 # Aggiorna solo record automatici (non manuali) per evitare sovrascritture
@@ -113,8 +115,8 @@ def update_db_from_telegram() -> None:
                     True,  # Ha piovuto (irrigato)
                     None,  # Quantità pioggia non nota per manuale
                     True,  # Modifica manuale
-                    datetime.now(timezone.utc).isoformat(),
-                    datetime.now().date().isoformat(),
+                    datetime.now(ROME_TZ).isoformat(),
+                    datetime.now(ROME_TZ).date().isoformat(),
                 ),
             )
 
@@ -141,8 +143,8 @@ def reset_today_precipitation() -> None:
                     False,  # Non ha piovuto
                     0.0,  # Quantità pioggia non nota
                     False,  # Non è una modifica manuale di irrigazione
-                    datetime.now(timezone.utc).isoformat(),
-                    datetime.now().date().isoformat(),
+                    datetime.now(ROME_TZ).isoformat(),
+                    datetime.now(ROME_TZ).date().isoformat(),
                 ),
             )
 
