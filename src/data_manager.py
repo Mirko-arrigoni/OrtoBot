@@ -56,7 +56,7 @@ def save_to_db_from_api(days: list[DailyPrecipitation]) -> None:
     db_path = get_database_settings()["name"]
     try:
         create_db_if_not_exists()  # Assicurati che la tabella esista prima di salvare
-        
+
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
 
@@ -235,7 +235,7 @@ def get_all_precipitation_data() -> list[dict]:
                 "SELECT date, is_rain, rain_mm, manual, updated_at FROM precipitation ORDER BY date"
             )
             rows = cursor.fetchall()
-            
+
         return [
             {
                 "date": row[0],
@@ -248,6 +248,7 @@ def get_all_precipitation_data() -> list[dict]:
         ]
     except sqlite3.Error as exc:
         raise RuntimeError(f"Errore leggendo dal DB: {exc}") from exc
+
 
 def create_db_if_not_exists() -> None:
     """

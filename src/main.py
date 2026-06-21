@@ -30,7 +30,7 @@ from data_manager import (
     update_db_from_telegram,
     get_all_precipitation_data,
     get_daily_precipitation,
-    create_db_if_not_exists
+    create_db_if_not_exists,
 )
 
 # === CONFIGURAZIONE LOGGING ===
@@ -96,7 +96,11 @@ async def db_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             )  # -1 perché include oggi
             if data:
                 max_date = max(d["date"] for d in data)
-                n_days_ago = (datetime.fromisoformat(max_date) - timedelta(days=days)).date().isoformat()
+                n_days_ago = (
+                    (datetime.fromisoformat(max_date) - timedelta(days=days))
+                    .date()
+                    .isoformat()
+                )
             else:
                 n_days_ago = (datetime.now() - timedelta(days=days)).date().isoformat()
             data = [d for d in data if d["date"] >= n_days_ago]
@@ -142,6 +146,7 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "❌ Errore durante il reset. Controlla i log del bot."
         )
 
+
 async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Gestore del comando /today.
@@ -163,6 +168,7 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "❌ Errore durante il controllo di oggi. Controlla i log del bot."
         )
 
+
 async def update_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Gestore del comando /update.
@@ -179,6 +185,7 @@ async def update_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(
             "❌ Errore durante l'aggiornamento. Controlla i log del bot."
         )
+
 
 async def irrigation_check(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -253,6 +260,11 @@ def main() -> int:
             interval=get_weather_settings()["interval_check"],  # Ogni X secondi
             first=30,  # Aspetta 30 secondi prima del primo controllo
             name="daily_precipitation_job",
+            job_kwargs={
+                "misfire_grace_time": 300,  # 5 minuti
+                "coalesce": True,
+                "max_instances": 1,
+            },
         )
 
         times = get_telegram_settings()["notification_time"]
@@ -265,6 +277,11 @@ def main() -> int:
                 irrigation_check,
                 time=time(hour=hour, minute=minute, tzinfo=ZoneInfo("Europe/Rome")),
                 name=f"irrigation_check_{hour}_{minute}",
+                job_kwargs={
+                    "misfire_grace_time": 300,  # 5 minuti
+                    "coalesce": True,
+                    "max_instances": 1,
+                },
             )
 
         logger.debug(
