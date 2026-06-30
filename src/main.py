@@ -257,15 +257,15 @@ def main() -> int:
         # Refresh dati precipitazione ogni X ore (configurato)
         app.job_queue.run_repeating(
             get_daily_precipitation,
-            interval=get_weather_settings()["interval_check"],  # Ogni X secondi
-            first=30,  # Aspetta 30 secondi prima del primo controllo
-            name="daily_precipitation_job",
-            job_kwargs={
-                "misfire_grace_time": 300,  # 5 minuti
-                "coalesce": True,
-                "max_instances": 1,
-            },
-        )
+                interval=get_weather_settings()["interval_check"],  # Ogni X secondi
+                first=5,  # Aspetta 5 secondi prima del primo controllo
+                name="daily_precipitation_job",
+                job_kwargs={
+                    "misfire_grace_time": 300,  # 5 minuti
+                    "coalesce": True,
+                    "max_instances": 1,
+                },
+            )
 
         times = get_telegram_settings()["notification_time"]
 
