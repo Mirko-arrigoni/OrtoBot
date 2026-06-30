@@ -16,4 +16,4 @@ debug:
 
 # Stop program manually
 stop:
-    pkill -f main.py
+    pkill -f orto
