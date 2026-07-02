@@ -14,11 +14,7 @@ import requests
 import requests_cache
 from retry_requests import retry
 
-from config_reader import (
-    get_database_settings,
-    get_irrigation_settings,
-    get_weather_settings,
-)
+from config_reader import get_database_settings
 
 from telegram.ext import ContextTypes
 
@@ -151,69 +147,6 @@ def reset_today_precipitation() -> None:
             conn.commit()
     except sqlite3.Error as exc:
         raise RuntimeError(f"Errore resettando il DB: {exc}") from exc
-
-
-async def get_daily_precipitation(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Recupera i dati di precipitazione giornaliera dall'API Open-Meteo e li salva nel DB.
-
-    Effettua una chiamata all'API con parametri basati sulla configurazione:
-    - Coordinate geografiche
-    - Range giorni passati/futuri
-    - Soglia pioggia per considerare "pioggia"
-
-    Raises:
-        RuntimeError: Se ci sono errori nella chiamata API o nel parsing
-    """
-    try:
-        wtr_settings = get_weather_settings()
-        irr_settings = get_irrigation_settings()
-
-        # Parametri per la chiamata API Open-Meteo
-        params = {
-            "latitude": wtr_settings["latitude"],  # Latitudine posizione
-            "longitude": wtr_settings["longitude"],  # Longitudine posizione
-            "daily": "precipitation_sum",  # Richiedi somma precipitazione giornaliera
-            "timezone": "Europe/Rome",  # Fuso orario italiano
-            "forecast_days": irr_settings["range_future_days"]
-            + 1,  # Giorni previsione + oggi
-            "past_days": irr_settings["range_past_days"],  # Giorni passati da includere
-        }
-
-        # import httpx
-
-        # async with httpx.AsyncClient() as client:
-        #     response = await client.get(
-        #         wtr_settings["api_url"],
-        #         params=params,
-        #         timeout=10,)
-
-        # Chiamata API con timeout di 10 secondi
-        response = requests.get(wtr_settings["api_url"], params=params, timeout=10)
-        response.raise_for_status()  # Solleva eccezione per errori HTTP
-
-        logger.debug(f"API meteo chiamata con params: {params}")
-
-        # Parsing della risposta JSON
-        data = response.json()
-        dates = data["daily"]["time"]  # Lista date ISO
-        precipitation = data["daily"]["precipitation_sum"]  # Lista mm pioggia per data
-
-        # Converte in oggetti tipizzati basandosi sulla soglia
-        result = [
-            DailyPrecipitation(
-                date=day,
-                is_rain=rain_mm > irr_settings["rain_threshold_mm"],
-                rain_mm=rain_mm,
-            )
-            for day, rain_mm in zip(dates, precipitation)
-        ]
-        save_to_db_from_api(result)
-
-    except requests.RequestException as exc:
-        raise RuntimeError(f"Errore recuperando dati meteo: {exc}") from exc
-    except (KeyError, ValueError) as exc:
-        raise RuntimeError(f"Errore parsing risposta meteo: {exc}") from exc
 
 
 def get_all_precipitation_data() -> list[dict]:

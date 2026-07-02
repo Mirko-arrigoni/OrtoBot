@@ -16,4 +16,4 @@ debug:
 
 # Stop program manually
 stop:
-    pkill -f orto
+    sudo pkill -f orto

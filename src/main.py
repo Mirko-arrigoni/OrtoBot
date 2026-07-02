@@ -24,14 +24,15 @@ from telegram.ext import (
 )
 
 from bll_watering import should_irrigate
-from config_reader import get_telegram_settings, get_weather_settings, get_current_dir
+from config_reader import (get_telegram_settings, get_weather_settings, get_current_dir)
 from data_manager import (
     reset_today_precipitation,
     update_db_from_telegram,
     get_all_precipitation_data,
-    get_daily_precipitation,
     create_db_if_not_exists,
 )
+
+from api_client import get_daily_precipitation
 
 # === CONFIGURAZIONE LOGGING ===
 # Legge il livello di log dalla configurazione, WARNING di default se non specificato o errato
