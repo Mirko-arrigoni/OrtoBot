@@ -89,7 +89,7 @@ def save_to_db_from_api(days: list[DailyPrecipitation]) -> None:
                         day_data.is_rain,
                         day_data.rain_mm,
                         now_iso,
-                        day_data.sunrise,\
+                        day_data.sunrise,
                         day_data.sunset,
                     ),
                 )
@@ -118,7 +118,7 @@ def update_db_from_telegram() -> None:
                     None,  # Quantità pioggia non nota per manuale
                     True,  # Modifica manuale
                     datetime.now(ROME_TZ).isoformat(),
-                    datetime.now(ROME_TZ).date().isoformat()
+                    datetime.now(ROME_TZ).date().isoformat(),
                 ),
             )
 
@@ -188,6 +188,7 @@ def get_all_precipitation_data() -> list[dict]:
     except sqlite3.Error as exc:
         raise RuntimeError(f"Errore leggendo dal DB: {exc}") from exc
 
+
 def get_sunset_sunrise_for_date(date: str) -> tuple[str, str]:
     """
     Recupera l'orario di alba e tramonto per una data specifica dal database.
@@ -217,6 +218,7 @@ def get_sunset_sunrise_for_date(date: str) -> tuple[str, str]:
             return None, None  # Nessun dato trovato per la data specificata
     except sqlite3.Error as exc:
         raise RuntimeError(f"Errore leggendo alba/tramonto dal DB: {exc}") from exc
+
 
 def create_db_if_not_exists() -> None:
     """

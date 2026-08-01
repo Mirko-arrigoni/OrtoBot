@@ -53,9 +53,14 @@ async def get_daily_precipitation(context: ContextTypes.DEFAULT_TYPE) -> None:
         params = {
             "latitude": wtr_settings["latitude"],  # Latitudine posizione
             "longitude": wtr_settings["longitude"],  # Longitudine posizione
-            "daily": ["sunrise", "sunset", "precipitation_sum"],  # Richiedi somma precipitazione giornaliera
+            "daily": [
+                "sunrise",
+                "sunset",
+                "precipitation_sum",
+            ],  # Richiedi somma precipitazione giornaliera
             "timezone": "Europe/Rome",  # Fuso orario italiano
-            "forecast_days": irr_settings["range_future_days"] + 1,  # Giorni previsione + oggi
+            "forecast_days": irr_settings["range_future_days"]
+            + 1,  # Giorni previsione + oggi
             "past_days": irr_settings["range_past_days"],  # Giorni passati da includere
         }
 
@@ -81,7 +86,9 @@ async def get_daily_precipitation(context: ContextTypes.DEFAULT_TYPE) -> None:
                 sunrise=_to_hhmm(sunrise_time),
                 sunset=_to_hhmm(sunset_time),
             )
-            for day, rain_mm, sunrise_time, sunset_time in zip(dates, precipitation, sunrise_times, sunset_times)
+            for day, rain_mm, sunrise_time, sunset_time in zip(
+                dates, precipitation, sunrise_times, sunset_times
+            )
         ]
         save_to_db_from_api(result)
 
