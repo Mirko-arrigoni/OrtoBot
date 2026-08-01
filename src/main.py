@@ -12,7 +12,9 @@ e un database SQLite per memorizzare i dati di precipitazione.
 """
 
 import logging
+import sqlite3
 import sys
+import time as t
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
 
@@ -24,12 +26,13 @@ from telegram.ext import (
 )
 
 from bll_watering import should_irrigate
-from config_reader import (get_telegram_settings, get_weather_settings, get_current_dir)
+from config_reader import (get_telegram_settings, get_weather_settings, get_current_dir, get_database_settings)
 from data_manager import (
     reset_today_precipitation,
     update_db_from_telegram,
     get_all_precipitation_data,
     create_db_if_not_exists,
+    get_sunset_sunrise_for_date
 )
 
 from api_client import get_daily_precipitation
@@ -223,6 +226,54 @@ async def irrigation_check(context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.exception("Impossibile inviare il messaggio di errore su Telegram")
 
 
+def _schedule_daily_job(app, job_name: str, time_value: str) -> None:
+    """Schedula un job giornaliero all'orario passato come HH:MM."""
+    try:
+        hour, minute = map(int, time_value.strip().split(":"))
+    except (ValueError, TypeError):
+        logger.warning("Orario non valido per %s: %r", job_name, time_value)
+        return
+
+    now = datetime.now(ZoneInfo("Europe/Rome"))
+    scheduled_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    if scheduled_time <= now:
+        logger.info("Job %s non schedulato: l'orario %02d:%02d è già passato", job_name, hour, minute)
+        return
+
+    app.job_queue.run_once(
+        irrigation_check,
+        when=scheduled_time,
+        name=job_name,
+        job_kwargs={
+            "misfire_grace_time": 300,
+            "coalesce": True,
+            "max_instances": 1,
+        },
+    )
+
+    logger.info(
+        "Job %s schedulato per le %02d:%02d",
+        job_name,
+        scheduled_time.hour,
+        scheduled_time.minute,
+    )
+
+
+def schedule_jobs_from_db(app) -> None:
+    """Legge sunrise e sunset dal DB e schedula due job giornalieri."""
+    db_path = get_database_settings()["name"]
+
+    sunrise_value, sunset_value = get_sunset_sunrise_for_date(datetime.now().date().isoformat())
+
+    if not sunrise_value or not sunset_value:
+        logger.warning("Nessun sunrise/sunset trovato nel DB; i job non verranno schedulati")
+        return
+
+    _schedule_daily_job(app, "irrigation_check_sunrise", sunrise_value)
+    _schedule_daily_job(app, "irrigation_check_sunset", sunset_value)
+
+
 def main() -> int:
     """
     Funzione principale che avvia il bot Telegram.
@@ -268,22 +319,20 @@ def main() -> int:
             },
         )
 
-        times = get_telegram_settings()["notification_time"]
+        #schedule_jobs_from_db(app)
 
-        # Per ogni orario configurato, pianifica un job per controllare l'irrigazione e inviare le notifiche
-        for t in times:
-            hour, minute = map(int, t.strip().split(":"))
+        t.sleep(10)
 
-            app.job_queue.run_daily(
-                irrigation_check,
-                time=time(hour=hour, minute=minute, tzinfo=ZoneInfo("Europe/Rome")),
-                name=f"irrigation_check_{hour}_{minute}",
-                job_kwargs={
-                    "misfire_grace_time": 300,  # 5 minuti
-                    "coalesce": True,
-                    "max_instances": 1,
-                },
-            )
+        app.job_queue.run_daily(
+            lambda context, app=app: schedule_jobs_from_db(app),
+            time=time(hour=0, minute=0, tzinfo=ZoneInfo("Europe/Rome")),
+            name="daily_schedule_job",
+            job_kwargs={
+                "misfire_grace_time": 300,
+                "coalesce": True,
+                "max_instances": 1,
+            },
+        )
 
         logger.debug(
             f"Bot avviato: comandi /w e /db disponibili, job pianificato ogni {get_weather_settings()['interval_check'] // 3600} ore"

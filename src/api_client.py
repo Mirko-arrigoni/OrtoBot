@@ -3,8 +3,10 @@ Modulo per la gestione delle chiamate API per il recupero dei dati meteo.
 Utilizza la libreria requests per effettuare chiamate HTTP e gestisce eventuali errori
 """
 
-import requests
 import logging
+from datetime import datetime
+
+import requests
 
 from config_reader import (
     get_irrigation_settings,
@@ -16,6 +18,20 @@ from telegram.ext import ContextTypes
 
 # Logger per questo modulo
 logger = logging.getLogger(__name__)
+
+
+def _to_hhmm(value: str | None) -> str | None:
+    """Converte un valore ISO datetime in stringa HH:MM."""
+    if not value:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.strftime("%H:%M")
+    except ValueError:
+        logger.warning("Orario non valido ricevuto dall'API: %r", value)
+        return str(value)
+
 
 async def get_daily_precipitation(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -37,10 +53,9 @@ async def get_daily_precipitation(context: ContextTypes.DEFAULT_TYPE) -> None:
         params = {
             "latitude": wtr_settings["latitude"],  # Latitudine posizione
             "longitude": wtr_settings["longitude"],  # Longitudine posizione
-            "daily": "precipitation_sum",  # Richiedi somma precipitazione giornaliera
+            "daily": ["sunrise", "sunset", "precipitation_sum"],  # Richiedi somma precipitazione giornaliera
             "timezone": "Europe/Rome",  # Fuso orario italiano
-            "forecast_days": irr_settings["range_future_days"]
-            + 1,  # Giorni previsione + oggi
+            "forecast_days": irr_settings["range_future_days"] + 1,  # Giorni previsione + oggi
             "past_days": irr_settings["range_past_days"],  # Giorni passati da includere
         }
 
@@ -54,6 +69,8 @@ async def get_daily_precipitation(context: ContextTypes.DEFAULT_TYPE) -> None:
         data = response.json()
         dates = data["daily"]["time"]  # Lista date ISO
         precipitation = data["daily"]["precipitation_sum"]  # Lista mm pioggia per data
+        sunrise_times = data["daily"]["sunrise"]  # Lista orari alba
+        sunset_times = data["daily"]["sunset"]  # Lista orari tramonti
 
         # Converte in oggetti tipizzati basandosi sulla soglia
         result = [
@@ -61,8 +78,10 @@ async def get_daily_precipitation(context: ContextTypes.DEFAULT_TYPE) -> None:
                 date=day,
                 is_rain=rain_mm > irr_settings["rain_threshold_mm"],
                 rain_mm=rain_mm,
+                sunrise=_to_hhmm(sunrise_time),
+                sunset=_to_hhmm(sunset_time),
             )
-            for day, rain_mm in zip(dates, precipitation)
+            for day, rain_mm, sunrise_time, sunset_time in zip(dates, precipitation, sunrise_times, sunset_times)
         ]
         save_to_db_from_api(result)
 

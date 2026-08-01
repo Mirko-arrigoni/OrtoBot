@@ -34,6 +34,8 @@ class DailyPrecipitation:
     date: str
     is_rain: bool
     rain_mm: float
+    sunrise: str  # Ora dell'alba
+    sunset: str  # Ora del tramonto
 
 
 def save_to_db_from_api(days: list[DailyPrecipitation]) -> None:
@@ -63,13 +65,15 @@ def save_to_db_from_api(days: list[DailyPrecipitation]) -> None:
                 cursor.execute(
                     """
                     UPDATE precipitation
-                    SET is_rain = ?, rain_mm = ?, updated_at = ?
+                    SET is_rain = ?, rain_mm = ?, updated_at = ?, sunrise = ?, sunset = ?
                     WHERE date = ? AND manual = FALSE
                 """,
                     (
                         day_data.is_rain,
                         day_data.rain_mm,
                         now_iso,
+                        day_data.sunrise,
+                        day_data.sunset,
                         day_data.date,
                     ),
                 )
@@ -77,14 +81,16 @@ def save_to_db_from_api(days: list[DailyPrecipitation]) -> None:
                 # Inserisce nuovo record se non esiste (non sovrascrive manuali)
                 cursor.execute(
                     """
-                    INSERT OR IGNORE INTO precipitation (date, is_rain, rain_mm, updated_at, manual)
-                    VALUES (?, ?, ?, ?, FALSE)
+                    INSERT OR IGNORE INTO precipitation (date, is_rain, rain_mm, updated_at, manual, sunrise, sunset)
+                    VALUES (?, ?, ?, ?, FALSE, ?, ?)
                 """,
                     (
                         day_data.date,
                         day_data.is_rain,
                         day_data.rain_mm,
                         now_iso,
+                        day_data.sunrise,\
+                        day_data.sunset,
                     ),
                 )
 
@@ -112,7 +118,7 @@ def update_db_from_telegram() -> None:
                     None,  # Quantità pioggia non nota per manuale
                     True,  # Modifica manuale
                     datetime.now(ROME_TZ).isoformat(),
-                    datetime.now(ROME_TZ).date().isoformat(),
+                    datetime.now(ROME_TZ).date().isoformat()
                 ),
             )
 
@@ -182,6 +188,35 @@ def get_all_precipitation_data() -> list[dict]:
     except sqlite3.Error as exc:
         raise RuntimeError(f"Errore leggendo dal DB: {exc}") from exc
 
+def get_sunset_sunrise_for_date(date: str) -> tuple[str, str]:
+    """
+    Recupera l'orario di alba e tramonto per una data specifica dal database.
+
+    Args:
+        date (str): Data in formato ISO
+
+    Returns:
+        tuple[str, str]: Tupla contenente (sunrise, sunset) in formato ISO
+
+    Raises:
+        RuntimeError: Se ci sono errori nella lettura del database
+    """
+    db_path = get_database_settings()["name"]
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+
+            cursor.execute(
+                "SELECT sunrise, sunset FROM precipitation WHERE date = ?", (date,)
+            )
+            row = cursor.fetchone()
+
+        if row:
+            return row[0], row[1]  # (sunrise, sunset)
+        else:
+            return None, None  # Nessun dato trovato per la data specificata
+    except sqlite3.Error as exc:
+        raise RuntimeError(f"Errore leggendo alba/tramonto dal DB: {exc}") from exc
 
 def create_db_if_not_exists() -> None:
     """
@@ -200,7 +235,9 @@ def create_db_if_not_exists() -> None:
                     is_rain BOOLEAN,              -- True se ha piovuto quel giorno
                     rain_mm REAL,                 -- Quantità di pioggia in mm (opzionale)
                     updated_at TEXT,              -- Timestamp ultima modifica (ISO)
-                    manual BOOLEAN DEFAULT FALSE  -- True se modificato manualmente
+                    manual BOOLEAN DEFAULT FALSE,  -- True se modificato manualmente
+                    sunrise TEXT,                 -- Ora dell'alba
+                    sunset TEXT                  -- Ora del tramonto
                 )
             """)
             conn.commit()
